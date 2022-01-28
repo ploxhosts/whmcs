@@ -3,7 +3,7 @@
 /**
 MIT License
 
-Copyright (c) 2018-2019 Stepan Fedotov <stepan@crident.com>
+Copyright (c) 2018-2022 Stepan Fedotov <stepan@crident.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -414,15 +414,15 @@ function pterodactyl_CreateAccount(array $params) {
         try {
 			$query = Capsule::table('tblhosting')->where('id', $params['serviceid'])->where('userid', $params['userid'])->update(array('dedicatedip' => $_IP . ":" . $_Port));
 		} catch (Exception $e) { return $e->getMessage() . "<br />" . $e->getTraceAsString(); }
-    }
+        } 
 
         Capsule::table('tblhosting')->where('id', $params['serviceid'])->update([
             'username' => '',
             'password' => '',
         ]);
-    } catch(Exception $err) {
-        return $err->getMessage();
-    }
+        } catch(Exception $err) {
+            return $err->getMessage();
+        }
 
     return 'success';
 }
@@ -615,7 +615,6 @@ function pterodactyl_LoginLink(array $params) {
         $hostname = pterodactyl_GetHostname($params);
         echo '<a style="padding-right:3px" href="'.$hostname.'/admin/servers/view/' . $serverId . '" target="_blank">[Go to Service]</a>';
         echo '<p style="float:right; padding-right:1.3%">[<a href="https://github.com/pterodactyl/whmcs/issues" target="_blank">Report A Bug</a>]</p>';
-        # echo '<p style="float: right">[<a href="https://github.com/pterodactyl/whmcs/issues" target="_blank">Report A Bug</a>]</p>';
     } catch(Exception $err) {
         // Ignore
     }
