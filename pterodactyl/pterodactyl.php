@@ -408,11 +408,19 @@ function pterodactyl_CreateAccount(array $params) {
         // Get IP & Port and set on WHMCS "Dedicated IP" field
         $_IP = $server['attributes']['relationships']['allocations']['data'][0]['attributes']['ip'];
         $_Port = $server['attributes']['relationships']['allocations']['data'][0]['attributes']['port'];
+        $_Identifier = $server['attributes']['identifier'];
+        $_UUID = $server['attributes']['uuid'];
+        $_Node = $server['attributes']['node'];
+        $_CreatedDate = $server['attributes']['created_at'];
         
         // Check if IP & Port field have value. Prevents ":" being added if API error
         if (isset($_IP) && isset($_Port)) {
         try {
 			$query = Capsule::table('tblhosting')->where('id', $params['serviceid'])->where('userid', $params['userid'])->update(array('dedicatedip' => $_IP . ":" . $_Port));
+            // PloxHost Modification, set the "domain" field with the short ID + dedicated IP
+            $query = Capsule::table('tblhosting')->where('id', $params['serviceid'])->where('userid', $params['userid'])->update(array('domain' => $_Identifier . " - " . $_IP . ":" . $_Port));
+            // PloxHost Modification, set the "notes" field with more information regarding the server
+            $query = Capsule::table('tblhosting')->where('id', $params['serviceid'])->where('userid', $params['userid'])->update(array('notes' => "Pterodactyl UUID: " . $_UUID . "\nPterodactyl IP: " . $_IP . "\nPterodactyl Port: " . $_Port . "\nPterodactyl Node: " . $_Node . "\nPterodactyl Server Creation Date: " . $_CreatedDate));
 		} catch (Exception $e) { return $e->getMessage() . "<br />" . $e->getTraceAsString(); }
         } 
 
