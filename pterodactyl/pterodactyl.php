@@ -335,7 +335,23 @@ function pterodactyl_CreateAccount(array $params) {
 
         $nestId = pterodactyl_GetOption($params, 'nest_id');
         $eggId = pterodactyl_GetOption($params, 'egg_id');
+        
+        // Get the jar name & ID file
+        $jarFileId = pterodactyl_GetOption($params, 'ptero_mc_jars');
 
+        if (isset($jarFileId)) {
+            $serverType = 'minecraft_hosting';
+            $jarInfo = explode(',', $jarFileId);
+            // Check if jar is curse
+            if (strpos($jarInfo[1], "C:")) {
+                $curse = "1";
+            } else {
+                $curse = "0";
+            }
+        } else {
+            $serverType = '';
+        }
+        
         $eggData = pterodactyl_API($params, 'nests/' . $nestId . '/eggs/' . $eggId . '?include=variables');
         if($eggData['status_code'] !== 200) throw new Exception('Failed to get egg data, received error code: ' . $eggData['status_code'] . '. Enable module debug log for more info.');
 
@@ -349,6 +365,9 @@ function pterodactyl_CreateAccount(array $params) {
 
             if(isset($friendlyName)) $environment[$var] = $friendlyName;
             elseif(isset($envName)) $environment[$var] = $envName;
+            elseif($serverType == 'minecraft_hosting' && $var == 'JARNAME') $environment[$var] = $jarInfo[0]; // Jar name
+            elseif($serverType == 'minecraft_hosting' && $var == 'JAR') $environment[$var] = $jarInfo[1]; // Jar ID
+            elseif($serverType == 'minecraft_hosting' && $var == 'CURSE') $environment[$var] = $curse; // Curse Forge
             else $environment[$var] = $default;
         }
 
