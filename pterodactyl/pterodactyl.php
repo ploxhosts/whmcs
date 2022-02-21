@@ -469,6 +469,12 @@ function pterodactyl_GetServerID(array $params, $raw = false) {
             ->select('user_id', 'server_id')
             ->where('service_id', '=', $params['serviceid'])
             ->first();
+    # Get value from "domain" field on WHMCS (PloxHost Migration from Multi -> Ptero)
+    # explode data
+    $explode = explode(" - ", $params['domain']);
+    if(isset($explode)) {
+        return $explode[1];
+    }
 
         if(isset($oldData) && isset($oldData->server_id)) {
             if($raw) {
