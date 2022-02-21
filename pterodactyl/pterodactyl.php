@@ -473,7 +473,7 @@ function pterodactyl_GetServerID(array $params, $raw = false) {
     # explode data
     $explode = explode(" - ", $params['domain']);
     if(isset($explode)) {
-        return $explode[1];
+        return $explode[0];
     }
 
         if(isset($oldData) && isset($oldData->server_id)) {
