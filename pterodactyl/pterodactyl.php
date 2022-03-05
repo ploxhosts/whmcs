@@ -590,6 +590,9 @@ function pterodactyl_ChangePackage(array $params) {
 
         // Modification to allow for dedicated IP upgrade
         $dedicated_ip = pterodactyl_GetOption($params, 'dedicated_ip') ? true : false;
+        if ($dedicated_ip == "") {
+            $dedicated_ip = false;
+        }
         $nodeID = $serverData['attributes']['node'];
         $oldAllocationID = $serverData['attributes']['allocation'];
         if ($dedicated_ip == true && !strpos($params['domain'], "25565")) {
@@ -726,7 +729,22 @@ function pterodactyl_ChangePackage(array $params) {
                 'add_allocations' => [$allocation_id],
                 'remove_allocations' => [$oldAllocationID],
             ];
-        } else {
+        } elseif ($dedicated_ip == false && $serverData['attributes']['egg'] == 74) {
+            $updateData = [
+                'allocation' => (int) $oldAllocationID,
+                'memory' => (int) $memory,
+                'swap' => (int) $swap,
+                'io' => (int) $io,
+                'cpu' => (int) $cpu,
+                'disk' => (int) $disk,
+                'oom_disabled' => $oom_disabled,
+                'feature_limits' => [
+                    'databases' => (int) $databases,
+                    'allocations' => (int) $allocations,
+                    'backups' => (int) $backups,
+                ],
+            ];    
+         } else {
             throw new Exception('Failed to change package of server because dedicated IP is not enabled or disabled.');
         }
 
