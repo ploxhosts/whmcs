@@ -59,7 +59,7 @@ function pterodactyl_API(array $params, $endpoint, array $data = [], $method = "
     curl_setopt($curl, CURLOPT_USERAGENT, "Pterodactyl-WHMCS");
     curl_setopt($curl, CURLOPT_FOLLOWLOCATION, 1);
     curl_setopt($curl, CURLOPT_POSTREDIR, CURL_REDIR_POST_301);
-    curl_setopt($curl, CURLOPT_TIMEOUT, 5);
+    curl_setopt($curl, CURLOPT_TIMEOUT, 10);
 
     $headers = [
         "Authorization: Bearer " . $params['serverpassword'],
@@ -387,6 +387,11 @@ function pterodactyl_CreateAccount(array $params) {
         $allocations = pterodactyl_GetOption($params, 'allocations');
         $backups = pterodactyl_GetOption($params, 'backups');
         $oom_disabled = pterodactyl_GetOption($params, 'oom_disabled') ? true : false;
+        // Set dedicated_ip to a proper port range (PloxHost Modification)
+        if ($dedicated_ip == true) {
+            $port_range = ["25565-25565"]; // NOTE: For future game hosting, this needs to be changed.
+            $dedicated_ip = false;
+        }
         $serverData = [
             'name' => $name,
             'user' => (int) $userId,
@@ -470,13 +475,19 @@ function pterodactyl_GetServerID(array $params, $raw = false) {
             ->where('service_id', '=', $params['serviceid'])
             ->first();
     
-    # Get value from "domain" field on WHMCS (PloxHost Migration from Multi -> Ptero)
-    # explode data
-    if ($params['domain'] != '') {
-        $explode = explode(' - ', $params['domain']);
-        $server_id = $explode[0];
-	return $server_id;
-    }
+        # Get value from "domain" field on WHMCS (PloxHost Migration from Multi -> Ptero)
+        # explode data
+        if ($params['domain'] != '') {
+            $explode = explode(' - ', $params['domain']);
+            $server_id = $explode[0];
+            $serverResult = pterodactyl_API($params, 'servers/' . $server_id, [], 'GET', true);
+            if($serverResult['status_code'] === 200) {
+                if($raw) return $serverResult;
+                else return $serverResult['attributes']['id'];
+            } else if($serverResult['status_code'] === 500) {
+                throw new Exception('Failed to get server, panel errored. Check panel logs for more info.');
+            }
+        }
 
         if(isset($oldData) && isset($oldData->server_id)) {
             if($raw) {
@@ -573,8 +584,89 @@ function pterodactyl_ChangePassword(array $params) {
 function pterodactyl_ChangePackage(array $params) {
     try {
         $serverData = pterodactyl_GetServerID($params, true);
+        //pteroLogger($serverData);
         if($serverData['status_code'] === 404 || !isset($serverData['attributes']['id'])) throw new Exception('Failed to change package of server because it doesn\'t exist.');
         $serverId = $serverData['attributes']['id'];
+
+        // Modification to allow for dedicated IP upgrade
+        $dedicated_ip = pterodactyl_GetOption($params, 'dedicated_ip') ? true : false;
+        $nodeID = $serverData['attributes']['node'];
+        $oldAllocationID = $serverData['attributes']['allocation'];
+        if ($dedicated_ip == true && !strpos($params['domain'], "25565")) {
+            // Locate dedicated IP addresses on the node
+            $_allocations = pterodactyl_API($params, 'nodes/' . $nodeID . '/allocations');
+            $_pages = $_allocations['meta']['pagination']['total_pages'];
+            $_currentPage = $_allocations['meta']['pagination']['current_page'];
+            $found = false;
+                if ($_pages == 1) {
+                    foreach($_allocations['data'] as $alloc) {
+                        if ($alloc['attributes']['port'] == 25565 && $alloc['attributes']['assigned'] == false){
+                                $found = true;
+                                $_IP = $alloc['attributes']['ip'];
+                                $_Port = $alloc['attributes']['port'];
+                                $allocation_id = $alloc['attributes']['id'];
+                            }
+                    }
+                } else {
+                    for($_currentPage =1; $_currentPage <= $_pages; $_currentPage++){
+                        $_allocations_Temp = pterodactyl_API($params, 'nodes/' . $nodeID . '/allocations?page=' . $_currentPage);
+                        foreach($_allocations_Temp['data'] as $alloc2){
+                            if ($alloc2['attributes']['port'] == 25565 && $alloc2['attributes']['assigned'] == false) {
+                                $found = true;
+                                $_IP = $alloc2['attributes']['ip'];
+                                $_Port = $alloc2['attributes']['port'];
+                                $allocation_id = $alloc2['attributes']['id'];
+                            }
+                        }
+                    }
+                }
+                if ($found == false) {
+                    throw new Exception('Failed to change package of server because there are no available dedicated IP addresses on the node.');
+                } elseif ($found == true) {
+                    $_Identifier = $serverData['attributes']['identifier'];
+                    $query = Capsule::table('tblhosting')->where('id', $params['serviceid'])->where('userid', $params['userid'])->update(array('dedicatedip' => $_IP . ":" . $_Port));
+                    // PloxHost Modification, set the "domain" field with the short ID + dedicated IP
+                    $query = Capsule::table('tblhosting')->where('id', $params['serviceid'])->where('userid', $params['userid'])->update(array('domain' => $_Identifier . " - " . $_IP . ":" . $_Port));        
+                }
+        }
+        // Check to see if dedicatedIP is false, but server has a dedicated IP and is minecraft hosting service
+        if ($dedicated_ip == false && strpos($params['domain'], "25565") && $serverData['attributes']['egg'] == 74) {
+            // Find a random allocation
+            $_allocations = pterodactyl_API($params, 'nodes/' . $nodeID . '/allocations');
+            $_pages = $_allocations['meta']['pagination']['total_pages'];
+            $_currentPage = $_allocations['meta']['pagination']['current_page'];
+            $found = false;
+                if ($_pages == 1) {
+                    foreach($_allocations['data'] as $alloc) {
+                        if ($alloc['attributes']['assigned'] == false && $alloc['attributes']['port'] != 25565){
+                                $found = true;
+                                $_IP = $alloc['attributes']['ip'];
+                                $_Port = $alloc['attributes']['port'];
+                                $allocation_id = $alloc['attributes']['id'];
+                            }
+                    }
+                } else {
+                    for($_currentPage =1; $_currentPage <= $_pages; $_currentPage++){
+                        $_allocations_Temp = pterodactyl_API($params, 'nodes/' . $nodeID . '/allocations?page=' . $_currentPage);
+                        foreach($_allocations_Temp['data'] as $alloc2){
+                            if ($alloc2['attributes']['assigned'] == false && $alloc2['attributes']['port'] != 25565) {
+                                $found = true;
+                                $_IP = $alloc2['attributes']['ip'];
+                                $_Port = $alloc2['attributes']['port'];
+                                $allocation_id = $alloc2['attributes']['id'];
+                            }
+                        }
+                    }
+                }
+                if ($found == false) {
+                    throw new Exception('Could not find allocation for server update.');
+                } elseif ($found == true) {
+                    $_Identifier = $serverData['attributes']['identifier'];
+                    $query = Capsule::table('tblhosting')->where('id', $params['serviceid'])->where('userid', $params['userid'])->update(array('dedicatedip' => $_IP . ":" . $_Port));
+                    // PloxHost Modification, set the "domain" field with the short ID + dedicated IP
+                    $query = Capsule::table('tblhosting')->where('id', $params['serviceid'])->where('userid', $params['userid'])->update(array('domain' => $_Identifier . " - " . $_IP . ":" . $_Port));        
+                }
+        }
 
         $memory = pterodactyl_GetOption($params, 'memory');
         $swap = pterodactyl_GetOption($params, 'swap');
@@ -585,8 +677,9 @@ function pterodactyl_ChangePackage(array $params) {
         $allocations = pterodactyl_GetOption($params, 'allocations');
         $backups = pterodactyl_GetOption($params, 'backups');
         $oom_disabled = pterodactyl_GetOption($params, 'oom_disabled') ? true : false;
+        if ($dedicated_ip == false && $serverData['attributes']['egg'] != 74) {
         $updateData = [
-            'allocation' => $serverData['attributes']['allocation'],
+            'allocation' => (int) $oldAllocationID,
             'memory' => (int) $memory,
             'swap' => (int) $swap,
             'io' => (int) $io,
@@ -599,6 +692,43 @@ function pterodactyl_ChangePackage(array $params) {
                 'backups' => (int) $backups,
             ],
         ];
+        } elseif ($dedicated_ip == true && !strpos($params['domain'], "25565")) {
+            $updateData = [
+                'allocation' => (int) $allocation_id,
+                'memory' => (int) $memory,
+                'swap' => (int) $swap,
+                'io' => (int) $io,
+                'cpu' => (int) $cpu,
+                'disk' => (int) $disk,
+                'oom_disabled' => $oom_disabled,
+                'feature_limits' => [
+                    'databases' => (int) $databases,
+                    'allocations' => (int) $allocations,
+                    'backups' => (int) $backups,
+                ],
+                'add_allocations' => [$allocation_id],
+                'remove_allocations' => [$oldAllocationID],
+            ];
+        } elseif ($dedicated_ip == false && strpos($params['domain'], "25565") && $serverData['attributes']['egg'] == 74) {
+            $updateData = [
+                'allocation' => (int) $allocation_id,
+                'memory' => (int) $memory,
+                'swap' => (int) $swap,
+                'io' => (int) $io,
+                'cpu' => (int) $cpu,
+                'disk' => (int) $disk,
+                'oom_disabled' => $oom_disabled,
+                'feature_limits' => [
+                    'databases' => (int) $databases,
+                    'allocations' => (int) $allocations,
+                    'backups' => (int) $backups,
+                ],
+                'add_allocations' => [$allocation_id],
+                'remove_allocations' => [$oldAllocationID],
+            ];
+        } else {
+            throw new Exception('Failed to change package of server because dedicated IP is not enabled or disabled.');
+        }
 
         $updateResult = pterodactyl_API($params, 'servers/' . $serverId . '/build', $updateData, 'PATCH');
         if($updateResult['status_code'] !== 200) throw new Exception('Failed to update build of the server, received error code: ' . $updateResult['status_code'] . '. Enable module debug log for more info.');
@@ -648,8 +778,7 @@ function pterodactyl_LoginLink(array $params) {
         if(!isset($serverId)) return;
 
         $hostname = pterodactyl_GetHostname($params);
-        echo '<a style="padding-right:3px" href="'.$hostname.'/admin/servers/view/' . $serverId . '" target="_blank">[Go to Service]</a>';
-        echo '<p style="float:right; padding-right:1.3%">[<a href="https://github.com/pterodactyl/whmcs/issues" target="_blank">Report A Bug</a>]</p>';
+        echo '<a style="padding-right:3px" href="'.$hostname.'/admin/servers/view/' . $serverId . '" target="_blank">[Go to PloxHost Panel]</a>';
     } catch(Exception $err) {
         // Ignore
     }
