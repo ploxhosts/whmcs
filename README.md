@@ -1,4 +1,7 @@
-## WHMCS
+## WHMCS Module
+
+This module has edits used by PloxHost, for it's hosting operations. You are more then welcome to use anything here. We are not responsible for any code errors / mistakes. We have fully tested everything here.
+Edits mostly include QOL & Specific features related the operations of our hosting company.
 
 WHMCS Module for the [Pterodactyl Panel](https://github.com/pterodactyl/panel/).
 
