@@ -679,9 +679,7 @@ function pterodactyl_ChangePackage(array $params) {
 
         // Modification to allow for dedicated IP upgrade
         $dedicated_ip = pterodactyl_GetOption($params, 'dedicated_ip') ? true : false;
-        if ($dedicated_ip == "") {
-            $dedicated_ip = false;
-        }
+
         $nodeID = $serverData['attributes']['node'];
         $oldAllocationID = $serverData['attributes']['allocation'];
         if ($dedicated_ip == true && !strpos($params['domain'], "25565")) {
@@ -800,6 +798,22 @@ function pterodactyl_ChangePackage(array $params) {
                 ],
                 'add_allocations' => [$allocation_id],
                 'remove_allocations' => [$oldAllocationID],
+            ];
+        } elseif ($dedicated_ip == true && strpos($params['domain'], "25565")) {
+            // we have to manually get the current allocation ID as this assumes a dedicated IP already existed prior to the server upgrade
+            $updateData = [
+                'allocation' => (int) $serverData['attributes']['allocation'],
+                'memory' => (int) $memory,
+                'swap' => (int) $swap,
+                'io' => (int) $io,
+                'cpu' => (int) $cpu,
+                'disk' => (int) $disk,
+                'oom_disabled' => $oom_disabled,
+                'feature_limits' => [
+                    'databases' => (int) $databases,
+                    'allocations' => (int) $allocations,
+                    'backups' => (int) $backups,
+                ],
             ];
         } elseif ($dedicated_ip == false && strpos($params['domain'], "25565") && $serverData['attributes']['egg'] == 74) {
             $updateData = [
